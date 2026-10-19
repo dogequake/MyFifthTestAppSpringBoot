@@ -17,6 +17,7 @@ import ru.chernyshev.MySecondTestAppSpringBoot.model.ErrorCodes;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.ErrorMessages;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.Request;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.Response;
+import ru.chernyshev.MySecondTestAppSpringBoot.service.ModifyRequestService;
 import ru.chernyshev.MySecondTestAppSpringBoot.service.ModifyResponseService;
 import ru.chernyshev.MySecondTestAppSpringBoot.service.ValidationService;
 import ru.chernyshev.MySecondTestAppSpringBoot.util.DateTimeUtil;
@@ -29,13 +30,21 @@ public class MyController {
 
     private final ValidationService validationService;
     private final ModifyResponseService modifyResponseService;
+    private final ModifyRequestService modifySourceRequestService;
+    private final ModifyRequestService modifySystemNameRequestService;
 
     @Autowired
     public MyController(ValidationService validationService,
                         @Qualifier("ModifySystemTimeResponseService")
-                        ModifyResponseService modifyResponseService) {
+                        ModifyResponseService modifyResponseService,
+                        @Qualifier("ModifySourceRequestService")
+                        ModifyRequestService modifySourceRequestService,
+                        @Qualifier("ModifySystemNameRequestService")
+                        ModifyRequestService modifySystemNameRequestService) {
         this.validationService = validationService;
         this.modifyResponseService = modifyResponseService;
+        this.modifySourceRequestService = modifySourceRequestService;
+        this.modifySystemNameRequestService = modifySystemNameRequestService;
     }
 
     @PostMapping(value = "/feedback")
@@ -60,6 +69,8 @@ public class MyController {
             if ("123".equals(request.getUid())) {
                 throw new UnsupportedCodeException("uid 123 не поддерживается");
             }
+            modifySourceRequestService.modify(request);
+            modifySystemNameRequestService.modify(request);
         } catch (ValidationFailedException e) {
             log.error("Ошибка валидации: {}", e.getMessage());
             bindingResult.getFieldErrors().forEach(error ->
