@@ -17,6 +17,7 @@ import ru.chernyshev.MySecondTestAppSpringBoot.model.ErrorCodes;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.ErrorMessages;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.Request;
 import ru.chernyshev.MySecondTestAppSpringBoot.model.Response;
+import ru.chernyshev.MySecondTestAppSpringBoot.service.AnnualBonusService;
 import ru.chernyshev.MySecondTestAppSpringBoot.service.ModifyRequestService;
 import ru.chernyshev.MySecondTestAppSpringBoot.service.ModifyResponseService;
 import ru.chernyshev.MySecondTestAppSpringBoot.service.ValidationService;
@@ -32,6 +33,7 @@ public class MyController {
     private final ModifyResponseService modifyResponseService;
     private final ModifyRequestService modifySourceRequestService;
     private final ModifyRequestService modifySystemNameRequestService;
+    private final AnnualBonusService annualBonusService;
 
     @Autowired
     public MyController(ValidationService validationService,
@@ -40,11 +42,13 @@ public class MyController {
                         @Qualifier("ModifySourceRequestService")
                         ModifyRequestService modifySourceRequestService,
                         @Qualifier("ModifySystemNameRequestService")
-                        ModifyRequestService modifySystemNameRequestService) {
+                        ModifyRequestService modifySystemNameRequestService,
+                        AnnualBonusService annualBonusService) {
         this.validationService = validationService;
         this.modifyResponseService = modifyResponseService;
         this.modifySourceRequestService = modifySourceRequestService;
         this.modifySystemNameRequestService = modifySystemNameRequestService;
+        this.annualBonusService = annualBonusService;
     }
 
     @PostMapping(value = "/feedback")
@@ -61,11 +65,9 @@ public class MyController {
                 .errorCode(ErrorCodes.EMPTY)
                 .errorMessage(ErrorMessages.EMPTY)
                 .build();
-        log.info("Сформирован начальный response: {}", response);
 
         try {
             validationService.isValid(bindingResult);
-            log.info("Валидация request пройдена успешно");
             if ("123".equals(request.getUid())) {
                 throw new UnsupportedCodeException("uid 123 не поддерживается");
             }
@@ -75,30 +77,33 @@ public class MyController {
             log.error("Ошибка валидации: {}", e.getMessage());
             bindingResult.getFieldErrors().forEach(error ->
                     log.error("bindingResult: поле '{}' – {}", error.getField(), error.getDefaultMessage()));
-            response.setCode(Codes.FAILED);
-            response.setErrorCode(ErrorCodes.VALIDATION_EXCEPTION);
-            response.setErrorMessage(ErrorMessages.VALIDATION);
-            log.info("Response изменён (ошибка валидации): {}", response);
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+            return failed(response, ErrorCodes.VALIDATION_EXCEPTION, ErrorMessages.VALIDATION,
+                    HttpStatus.BAD_REQUEST);
         } catch (UnsupportedCodeException e) {
             log.error("Неподдерживаемый uid: {}", e.getMessage());
-            response.setCode(Codes.FAILED);
-            response.setErrorCode(ErrorCodes.UNSUPPORTED_EXCEPTION);
-            response.setErrorMessage(ErrorMessages.UNSUPPORTED);
-            log.info("Response изменён (неподдерживаемый uid): {}", response);
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+            return failed(response, ErrorCodes.UNSUPPORTED_EXCEPTION, ErrorMessages.UNSUPPORTED,
+                    HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             log.error("Непредвиденная ошибка: {}", e.getMessage());
-            response.setCode(Codes.FAILED);
-            response.setErrorCode(ErrorCodes.UNKNOWN_EXCEPTION);
-            response.setErrorMessage(ErrorMessages.UNKNOWN);
-            log.info("Response изменён (непредвиденная ошибка): {}", response);
-            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            return failed(response, ErrorCodes.UNKNOWN_EXCEPTION, ErrorMessages.UNKNOWN,
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
+        response.setAnnualBonus(annualBonusService.calculate(request.getPosition(),
+                request.getSalary(), request.getBonus(), request.getWorkDays()));
+
         Response modified = modifyResponseService.modify(response);
-        log.info("Response после modifyResponseService: {}", modified);
+        log.info("Отправлен response: {}", modified);
 
         return new ResponseEntity<>(modified, HttpStatus.OK);
+    }
+
+    private ResponseEntity<Response> failed(Response response, ErrorCodes errorCode,
+                                            ErrorMessages errorMessage, HttpStatus status) {
+        response.setCode(Codes.FAILED);
+        response.setErrorCode(errorCode);
+        response.setErrorMessage(errorMessage);
+        log.info("Response изменён (ошибка): {}", response);
+        return new ResponseEntity<>(response, status);
     }
 }
